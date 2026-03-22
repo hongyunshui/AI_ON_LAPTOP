@@ -1,256 +1,84 @@
 # WSL 安装
 
-## 一、安装环境
+## 安装环境
    CPU：AMD Ryzen 5 PRO 7640HS w/ Radeon 760M Graphics  (4.30 GHz)
    GPU:NVIDIA RTX A500
    RAM:16GB
-   
-二、已经完成的事情
-你已经完成了非常关键的基础步骤：
-
-✔ 安装 WSL2
-系统：
-
-Ubuntu 22.04
-WSL 正常运行。
-
-✔ 在 WSL 中安装 Docker
-安装组件：
-
-docker-ce
-docker-ce-cli
-containerd
-docker compose
-Docker 已能运行。
-
-✔ 在 Docker 中部署 Ollama
-已经：
-
-安装 ollama
-GPU 能被调用
-AI 环境已经基本成型。
-
-三、开始做网络测试
-为了让：
 
-WSL
-Docker
-Ollama
-能够访问外网。
-
-你开始测试代理。
-
-四、遇到的第一个问题
-尝试让 WSL 使用 Windows 的 v2rayN 代理：
-
-代理端口：
-
-socks5 10808
-http   10809
-测试：
-
-curl -x socks5h://172.22.144.1:10808 https://www.google.com
-结果：
-
-卡住
-五、进一步测试
-做了多个排查：
-
-1️⃣ ping Windows 网关
-ping 172.22.144.1
-结果：
-
-100% packet loss
-2️⃣ TCP 测试
-nc -vz 172.22.144.1 10808
-结果：
-
-connection timed out
-3️⃣ 代理测试
-curl -x socks5h://172.22.144.1:10808
-结果：
-
-无法连接
-六、Windows 给出的关键提示
-当启动 WSL 时看到警告：
-
-wsl: 检测到 localhost 代理配置，但未镜像到 WSL。
-NAT 模式下的 WSL 不支持 localhost 代理
-这条信息 非常关键。
-
-七、问题的真正原因
-WSL2 的网络架构是：
-
-Windows
-   │
-Hyper-V NAT
-   │
-WSL2
-这意味着：
-
-WSL 和 Windows 不是同一网络栈。
-
-Windows 代理只作用于：
-Windows 应用
-例如：
-
-Chrome
-Edge
-PowerShell
-Windows curl
-不会作用于：
-WSL
-Docker
-Linux 程序
-因为它们是：
-
-独立 Linux 内核
-八、为什么连接不上
-原因有三个：
-
-① NAT 网络隔离
-WSL → Windows 不完全互通。
-
-② localhost 不共享
-Windows 127.0.0.1
-≠
-WSL 127.0.0.1
-③ v2rayN 默认监听 localhost
-监听：
-
-127.0.0.1:10808
-WSL 访问不了。
-
-九、尝试过的解决方案
-分析过的几个方案：
-
-方案1：允许 v2rayN 局域网访问
-理论：
-
-0.0.0.0:10808
-WSL 可访问。
-
-但环境仍然不通。
-
-方案2：使用 host.docker.internal
-让 WSL 访问 Windows：
-
-host.docker.internal:10808
-理论可行。
-
-但环境存在 NAT 限制。
-
-方案3：Windows 端口转发
-使用：
-
-netsh portproxy
-把：
-
-172.22.144.1:10808
-→
-127.0.0.1:10808
-但仍未完全验证成功。
-
-十、当前结论
-情况属于：
-
-WSL NAT + Windows localhost代理 不可自动继承
-
-这是：
-
-WSL2 官方设计行为
-
-不是配置错误。
-
-十一、当前系统状态
-现在的环境：
-
-组件	状态
-Windows	正常
-WSL2	正常
-Docker	正常
-Ollama	正常
-GPU调用	正常
-v2rayN	正常
-WSL代理	未打通
-十二、目前对 AI 实验的影响
-影响主要在：
-
-下载资源
-例如：
-
-Docker镜像
-Huggingface模型
-GitHub项目
-但：
-
-本地模型运行完全不受影响。
-
-十三、三种推荐解决方案
-按稳定性排序：
-
-⭐方案1（最推荐）
-在 WSL 内运行代理
-
-例如：
-
-clash
-sing-box
-v2ray
-优点：
-
-Linux原生
-Docker / apt / git 全部可用
-不依赖 Windows
-⭐方案2
-使用：
-
-proxychains
-只在执行命令时走代理：
-
-例如：
-
-proxychains git clone
-⭐方案3
-使用 系统级 VPN
-
-例如：
-
-Clash TUN
-OpenVPN
-Wireguard
-优点：
-
-WSL 自动翻墙。
-
-十四、关于免费节点
-不建议使用原因：
-
-不稳定
-容易被封
-速度慢
-存在安全风险
-对于：
-
-AI
-Docker
-模型下载
-非常不友好。
-
-十五、最终项目情况
-已经完成了 80% 的 AI 实验环境搭建：
-
-Windows
-↓
-WSL2
-↓
-Docker
-↓
-Ollama
-↓
-GPU
-这套环境：
-
-已经达到很多 AI开发者 的水平。
-
-看完你就会彻底理解整个系统。
+---
+
+## 1. 预期安装步骤（标准流程）
+
+1. **以管理员身份打开 PowerShell**  
+2. **执行安装命令**  
+   ```powershell
+   wsl --install
+   ```
+   - 自动启用 WSL 功能
+   - 安装 WSL 2 内核
+   - 安装默认的 Linux 发行版（Ubuntu）
+3. **重启电脑**（如有提示）  
+4. **验证安装**  
+   ```powershell
+   wsl -l -v
+   ```
+   正常输出应显示已安装的发行版及 WSL 版本。
+
+---
+
+## 2. 实际遇到的问题
+
+- **问题 1**：执行 `wsl -l -v` 时未显示发行版列表，而是直接输出 `wsl.exe` 的帮助信息。  
+  **原因**：WSL 核心功能尚未完全启用，系统未初始化 WSL 环境。
+
+- **问题 2**：以管理员身份执行 `wsl --install` 后，出现 **“操作超时”** 错误，无法完成下载。  
+  **原因**：网络连接不稳定或被限制，导致 PowerShell 无法从微软服务器下载所需组件及 Linux 发行版。
+
+---
+
+## 3. 解决办法（按推荐顺序）
+
+### 方案一：更换网络 + 使用 `--web-download` 参数
+- 切换至更稳定的网络（如手机热点），在管理员 PowerShell 中执行：
+  ```powershell
+  wsl --install --web-download
+  ```
+- 若仍有超时，可尝试修改 DNS 为 `114.114.114.114` 或 `8.8.8.8` 后重试。
+
+### 方案二：手动启用 WSL 功能 + 通过 Microsoft Store 安装发行版（成功率最高）
+1. **手动启用功能**  
+   - 打开“控制面板” → “程序” → “启用或关闭 Windows 功能”  
+   - 勾选：  
+     - **适用于 Linux 的 Windows 子系统**  
+     - **虚拟机平台**  
+   - 点击“确定”，完成安装后**重启电脑**。  
+
+2. **安装 Ubuntu**  
+   - 打开 Microsoft Store  
+   - 搜索 **Ubuntu**（推荐 22.04 LTS 版本）  
+   - 点击“获取”或“安装”，等待下载完成。  
+
+3. **设置 WSL 2**（可选，但建议）  
+   - 启动安装好的 Ubuntu，完成首次配置（设置用户名、密码）  
+   - 在 PowerShell 中执行：
+     ```powershell
+     wsl --set-default-version 2
+     wsl --set-version Ubuntu 2
+     ```
+
+### 方案三：使用 winget 安装
+- 以管理员身份运行 PowerShell，执行：
+  ```powershell
+  winget install Canonical.Ubuntu
+  ```
+- 安装完成后同样需启动并配置 Ubuntu。
+
+### 方案四：离线安装包（终极方案）
+- 从国内镜像站（如清华大学 TUNA）下载 Ubuntu WSL 的 `.appx` 离线包  
+- 双击安装包，按提示完成安装  
+
+---
+
+## 4. 当前结果
+
+一经成功安装
