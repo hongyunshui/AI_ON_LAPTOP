@@ -1,492 +1,443 @@
-# 在笔记本电脑上搭建一个AI学习测试环境 AI_ON_LAPTOP
+# ThinkPad 本地 AI 环境完整部署
 
-**目标 → 实施过程 → 遇到问题 → 解决情况 → 当前结论 → 后续建议** 
-
-
-# 一、整体目标
-
-整体目标分成 **三个阶段**：
-
-### 1️⃣ 基础环境搭建
-
-在 Windows 笔记本上建立一个 **AI实验环境**：
-
-* Windows
-* WSL2（Ubuntu 22.04）
-* Docker
-* Ollama
-* GPU 调用
-
-目的是：
-
-* 学习大模型
-* 测试硬件性能
-* 未来可能出租算力
 
 ---
 
-### 2️⃣ 网络能力
+# 一、部署目标
 
-让 WSL / Docker / Ollama 能访问外网：
+在 **ThinkPad + Windows11** 环境中实现：
 
-* 拉取 Docker 镜像
-* 下载模型
-* 访问 GitHub
-* 访问 AI 资源
+* Windows 11
+* WSL2 运行 **Ubuntu 22.04**
+* Ubuntu 内安装 **Docker**
+* Docker 中运行 **Ollama**
+* Ollama **调用 NVIDIA A500 GPU**
+* 为后续 **OpenWebUI / OpenClaw / AI实验**提供模型服务
 
-已经在 Windows 上使用：
-
-* **v2rayN**
-
-作为代理工具。
-
----
-
-### 3️⃣ 代理整合
-
-希望：
+最终目标：
 
 ```
-Windows v2rayN 全局代理
-↓
-WSL 自动走代理
-↓
-Docker / Ollama 可以联网
+Windows11
+   │
+   └── WSL2 (Ubuntu 22.04)
+           │
+           └── Docker
+                  │
+                  └── Ollama (GPU加速)
 ```
 
 ---
 
-# 二、已经完成的事情
+# 二、WSL2 与 Ubuntu 安装
 
-你已经完成了非常关键的基础步骤：
+首先安装 **WSL2 + Ubuntu22.04**
 
-### ✔ 安装 WSL2
+### 1 安装WSL
 
-系统：
+PowerShell（管理员）
 
+```powershell
+wsl --install
 ```
-Ubuntu 22.04
-```
 
-WSL 正常运行。
+设置WSL2
+
+```powershell
+wsl --set-default-version 2
+```
 
 ---
 
-### ✔ 在 WSL 中安装 Docker
+### 2 安装 Ubuntu22.04
 
-安装组件：
-
-```
-docker-ce
-docker-ce-cli
-containerd
-docker compose
+```powershell
+wsl --install -d Ubuntu-22.04
 ```
 
-Docker 已能运行。
+安装完成后
+
+创建 Linux 用户。
 
 ---
 
-### ✔ 在 Docker 中部署 Ollama
+# 三、Docker 安装
 
-已经：
+进入 **Ubuntu**
 
-* 安装 ollama
-* GPU 能被调用
+### 1 更新系统
 
-AI 环境已经基本成型。
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
 
 ---
 
-# 三、开始做网络测试
+### 2 安装依赖
 
-为了让：
-
+```bash
+sudo apt install -y ca-certificates curl gnupg
 ```
-WSL
-Docker
-Ollama
-```
-
-能够访问外网。
-
-你开始测试代理。
 
 ---
 
-# 四、遇到的第一个问题
+### 3 添加 Docker 官方仓库
 
-尝试让 WSL 使用 Windows 的 v2rayN 代理：
-
-代理端口：
-
+```bash
+sudo install -m 0755 -d /etc/apt/keyrings
 ```
-socks5 10808
-http   10809
+
+```bash
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 ```
+
+```bash
+echo \
+"deb [arch=$(dpkg --print-architecture) \
+signed-by=/etc/apt/keyrings/docker.gpg] \
+https://download.docker.com/linux/ubuntu \
+$(lsb_release -cs) stable" | \
+sudo tee /etc/apt/sources.list.d/docker.list
+```
+
+---
+
+### 4 安装 Docker
+
+```bash
+sudo apt update
+```
+
+```bash
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+---
+
+### 5 允许普通用户运行docker
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+重新登录。
 
 测试：
 
-```
-curl -x socks5h://172.22.144.1:10808 https://www.google.com
-```
-
-结果：
-
-```
-卡住
+```bash
+docker run hello-world
 ```
 
 ---
 
-# 五、进一步测试
+# 四、配置 GPU 支持
 
-做了多个排查：
+为了让 **Docker 容器调用显卡**，安装 **NVIDIA Container Toolkit**
 
-### 1️⃣ ping Windows 网关
+---
 
-```
-ping 172.22.144.1
-```
+### 1 添加 NVIDIA 源
 
-结果：
-
-```
-100% packet loss
+```bash
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit.gpg
 ```
 
 ---
 
-### 2️⃣ TCP 测试
+### 2 添加仓库
 
-```
-nc -vz 172.22.144.1 10808
-```
-
-结果：
-
-```
-connection timed out
+```bash
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/ubuntu22.04/libnvidia-container.list | \
+sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit.gpg] https://#g' | \
+sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 ```
 
 ---
 
-### 3️⃣ 代理测试
+### 3 安装 toolkit
 
-```
-curl -x socks5h://172.22.144.1:10808
+```bash
+sudo apt update
 ```
 
-结果：
-
-```
-无法连接
+```bash
+sudo apt install -y nvidia-container-toolkit
 ```
 
 ---
 
-# 六、Windows 给出的关键提示
+### 4 重启 docker
 
-当启动 WSL 时看到警告：
-
+```bash
+sudo systemctl restart docker
 ```
-wsl: 检测到 localhost 代理配置，但未镜像到 WSL。
-NAT 模式下的 WSL 不支持 localhost 代理
-```
-
-这条信息 **非常关键**。
 
 ---
 
-# 七、问题的真正原因
+### 5 测试 GPU
 
-WSL2 的网络架构是：
+```bash
+docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
+```
+
+如果看到 **A500 显卡信息**说明成功。
+
+---
+
+# 五、部署 Ollama
+
+为了方便管理，你后来做了**目录规划**：
 
 ```
-Windows
+~/ai/
+   ├── apps/
+   │    └── ollama/
+   │         └── docker-compose.yml
    │
-Hyper-V NAT
+   └── ollama/
+        └── models
+```
+
+---
+
+# 六、Ollama docker-compose
+
+进入目录
+
+```
+~/ai/apps/ollama
+```
+
+创建
+
+```
+docker-compose.yml
+```
+
+内容：
+
+```yaml
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: always
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ~/ai/ollama:/root/.ollama
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+    runtime: nvidia
+```
+
+---
+
+# 七、启动 Ollama
+
+```bash
+sudo docker compose up -d
+```
+
+检查
+
+```bash
+docker ps
+```
+
+---
+
+# 八、下载模型测试
+
+例如：
+
+### 下载模型
+
+```bash
+docker exec -it ollama ollama pull llama3
+```
+
+或
+
+```bash
+docker exec -it ollama ollama pull qwen:7b
+```
+
+---
+
+### 运行模型
+
+```bash
+docker exec -it ollama ollama run llama3
+```
+
+---
+
+# 九、GPU调用测试
+
+查看 GPU 是否被使用
+
+```bash
+watch -n 1 nvidia-smi
+```
+
+如果看到
+
+```
+ollama
+python
+```
+
+占用 GPU，说明成功。
+
+---
+
+# 十、数据持久化
+
+你还做了一个重要优化：
+
+**将ollama数据独立存储**
+
+目录：
+
+```
+~/ai/ollama
+```
+
+容器内部：
+
+```
+/root/.ollama
+```
+
+好处：
+
+* 删除容器 **模型不会丢**
+* 方便迁移
+* 方便备份
+
+---
+
+# 十一、遇到的问题
+
+部署过程中遇到过几个问题：
+
+### 1 Docker 镜像拉取慢
+
+解决：
+
+配置国内镜像
+
+```
+/etc/docker/daemon.json
+```
+
+例如：
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://hub-mirror.c.163.com"
+  ]
+}
+```
+
+然后
+
+```
+sudo systemctl restart docker
+```
+
+---
+
+### 2 WSL网络问题
+
+WSL默认：
+
+* 与 Windows 共用网络
+* 可以访问外网
+
+后来你还讨论了：
+
+* 全局代理
+* WSL代理配置
+
+---
+
+### 3 数据目录规划问题
+
+早期目录：
+
+```
+~/docker_ollama
+```
+
+后来优化为：
+
+```
+~/ai/apps/ollama
+~/ai/ollama
+```
+
+并使用 **rsync 迁移数据**
+
+---
+
+# 十二、最终结果
+
+最终成功实现：
+
+✔ WSL2 Ubuntu
+✔ Docker
+✔ GPU支持
+✔ Ollama容器
+✔ 模型下载运行
+✔ 数据持久化
+
+系统结构：
+
+```
+Windows 11
    │
-WSL2
+   └── WSL2 (Ubuntu 22.04)
+         │
+         └── Docker
+               │
+               └── Ollama
+                     │
+                     └── GPU (A500)
 ```
 
-这意味着：
+你现在已经可以：
 
-WSL 和 Windows **不是同一网络栈**。
+* 跑 **Qwen**
+* 跑 **Llama**
+* 跑 **Mistral**
+* 接入 **OpenWebUI**
 
 ---
 
-### Windows 代理只作用于：
+# 十三、你这套架构的价值
 
-```
-Windows 应用
-```
+已经搭出了一个**标准本地AI开发环境**：
 
-例如：
+能力包括：
 
-* Chrome
-* Edge
-* PowerShell
-* Windows curl
+* 本地大模型推理
+* GPU推理测试
+* Docker AI服务部署
+* WebUI调用
+* 后续 API服务
 
----
-
-### 不会作用于：
-
-```
-WSL
-Docker
-Linux 程序
-```
-
-因为它们是：
-
-```
-独立 Linux 内核
-```
 
 ---
 
-# 八、为什么连接不上
-
-原因有三个：
-
-### ① NAT 网络隔离
-
-WSL → Windows 不完全互通。
-
----
-
-### ② localhost 不共享
-
-```
-Windows 127.0.0.1
-≠
-WSL 127.0.0.1
-```
-
----
-
-### ③ v2rayN 默认监听 localhost
-
-监听：
-
-```
-127.0.0.1:10808
-```
-
-WSL 访问不了。
-
----
-
-# 九、尝试过的解决方案
-
-分析过的几个方案：
-
----
-
-## 方案1：允许 v2rayN 局域网访问
-
-理论：
-
-```
-0.0.0.0:10808
-```
-
-WSL 可访问。
-
-但环境仍然不通。
-
----
-
-## 方案2：使用 host.docker.internal
-
-让 WSL 访问 Windows：
-
-```
-host.docker.internal:10808
-```
-
-理论可行。
-
-但环境存在 NAT 限制。
-
----
-
-## 方案3：Windows 端口转发
-
-使用：
-
-```
-netsh portproxy
-```
-
-把：
-
-```
-172.22.144.1:10808
-→
-127.0.0.1:10808
-```
-
-但仍未完全验证成功。
-
----
-
-# 十、当前结论
-
-情况属于：
-
-**WSL NAT + Windows localhost代理 不可自动继承**
-
-这是：
-
-> WSL2 官方设计行为
-
-不是配置错误。
-
----
-
-# 十一、当前系统状态
-
-现在的环境：
-
-| 组件      | 状态  |
-| ------- | --- |
-| Windows | 正常  |
-| WSL2    | 正常  |
-| Docker  | 正常  |
-| Ollama  | 正常  |
-| GPU调用   | 正常  |
-| v2rayN  | 正常  |
-| WSL代理   | 未打通 |
-
----
-
-# 十二、目前对 AI 实验的影响
-
-影响主要在：
-
-### 下载资源
-
-例如：
-
-* Docker镜像
-* Huggingface模型
-* GitHub项目
-
----
-
-但：
-
-**本地模型运行完全不受影响。**
-
----
-
-# 十三、三种推荐解决方案
-
-按稳定性排序：
-
----
-
-# ⭐方案1（最推荐）
-
-**在 WSL 内运行代理**
-
-例如：
-
-```
-clash
-sing-box
-v2ray
-```
-
-优点：
-
-* Linux原生
-* Docker / apt / git 全部可用
-* 不依赖 Windows
-
----
-
-# ⭐方案2
-
-使用：
-
-```
-proxychains
-```
-
-只在执行命令时走代理：
-
-例如：
-
-```
-proxychains git clone
-```
-
----
-
-# ⭐方案3
-
-使用 **系统级 VPN**
-
-例如：
-
-```
-Clash TUN
-OpenVPN
-Wireguard
-```
-
-优点：
-
-WSL 自动翻墙。
-
----
-
-# 十四、关于免费节点
-
-不建议使用原因：
-
-* 不稳定
-* 容易被封
-* 速度慢
-* 存在安全风险
-
-对于：
-
-```
-AI
-Docker
-模型下载
-```
-
-非常不友好。
-
----
-
-# 十五、最终项目情况
-
-已经完成了 **80% 的 AI 实验环境搭建**：
-
-```
-Windows
-↓
-WSL2
-↓
-Docker
-↓
-Ollama
-↓
-GPU
-```
-
-这套环境：
-
-已经达到很多 **AI开发者** 的水平。
-
----
-
-
-看完你就会彻底理解整个系统。
