@@ -1,98 +1,77 @@
 # ThinkPad 本地 AI 环境完整部署
 
 
----
+✅ **WSL2 Ubuntu**
+✅ **Docker + GPU支持**
+✅ **Ollama**
+✅ **OpenWebUI**
+✅ **LiteLLM**
+✅ **部署模型（如 百炼Coding Plan）**
+✅ **统一目录结构**
+✅ **容器编排与持久化**
 
-# 一、部署目标
+# 本文价值：
 
-在 **ThinkPad + Windows11** 环境中实现：
-
-* Windows 11
-* WSL2 运行 **Ubuntu 22.04**
-* Ubuntu 内安装 **Docker**
-* Docker 中运行 **Ollama**
-* Ollama **调用 NVIDIA A500 GPU**
-* 为后续 **OpenWebUI / OpenClaw / AI实验**提供模型服务
-
-最终目标：
-
-```
-Windows11
-   │
-   └── WSL2 (Ubuntu 22.04)
-           │
-           └── Docker
-                  │
-                  └── Ollama (GPU加速)
-```
+📌 私人备份文档
+📌 技术博客/笔记
+📌 Markdown部署文档
+📌 自动化脚本模板
 
 ---
 
-# 二、WSL2 与 Ubuntu 安装
+# 📌 一、总体架构（部署结构图）
 
-首先安装 **WSL2 + Ubuntu22.04**
+```
+Windows 11
+  └── WSL2 (Ubuntu 22.04)
+       ├── Docker Engine
+       │     ├── ollama (大模型推理)
+       │     ├── openwebui (Web 前端)
+       │     └── litellm (模型管理代理)
+       ├── 数据持久化目录
+       │     ├── ollama/
+       │     ├── openwebui/
+       │     └── litellm/
+       └── GPU (NVIDIA A500)
+```
 
-### 1 安装WSL
+---
 
-PowerShell（管理员）
+# 📌 二、依赖环境
+
+## 1️⃣ Windows → 启用 WSL2
+
+PowerShell（管理员）：
 
 ```powershell
 wsl --install
-```
-
-设置WSL2
-
-```powershell
 wsl --set-default-version 2
-```
-
----
-
-### 2 安装 Ubuntu22.04
-
-```powershell
 wsl --install -d Ubuntu-22.04
 ```
 
-安装完成后
-
-创建 Linux 用户。
-
 ---
 
-# 三、Docker 安装
+# 📌 三、Ubuntu 环境准备
 
-进入 **Ubuntu**
-
-### 1 更新系统
+进入 Ubuntu：
 
 ```bash
-sudo apt update
-sudo apt upgrade -y
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl ca-certificates gnupg lsb-release
 ```
 
 ---
 
-### 2 安装依赖
+# 📌 四、安装 Docker
 
-```bash
-sudo apt install -y ca-certificates curl gnupg
-```
-
----
-
-### 3 添加 Docker 官方仓库
+### 添加 Docker 官方源：
 
 ```bash
 sudo install -m 0755 -d /etc/apt/keyrings
-```
 
-```bash
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
 sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-```
 
-```bash
 echo \
 "deb [arch=$(dpkg --print-architecture) \
 signed-by=/etc/apt/keyrings/docker.gpg] \
@@ -101,27 +80,20 @@ $(lsb_release -cs) stable" | \
 sudo tee /etc/apt/sources.list.d/docker.list
 ```
 
----
-
-### 4 安装 Docker
+### 安装 Docker：
 
 ```bash
 sudo apt update
-```
-
-```bash
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
----
-
-### 5 允许普通用户运行docker
+授权当前用户使用 Docker：
 
 ```bash
 sudo usermod -aG docker $USER
 ```
 
-重新登录。
+重启 shell。
 
 测试：
 
@@ -131,92 +103,61 @@ docker run hello-world
 
 ---
 
-# 四、配置 GPU 支持
-
-为了让 **Docker 容器调用显卡**，安装 **NVIDIA Container Toolkit**
-
----
-
-### 1 添加 NVIDIA 源
+# 📌 五、配置 GPU 支持 (NVIDIA Container Runtime)
 
 ```bash
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
 sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit.gpg
-```
 
----
-
-### 2 添加仓库
-
-```bash
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/ubuntu22.04/libnvidia-container.list | \
+curl -sL https://nvidia.github.io/libnvidia-container/stable/ubuntu22.04/libnvidia-container.list | \
 sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit.gpg] https://#g' | \
 sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-```
 
----
-
-### 3 安装 toolkit
-
-```bash
 sudo apt update
-```
-
-```bash
 sudo apt install -y nvidia-container-toolkit
-```
-
----
-
-### 4 重启 docker
-
-```bash
 sudo systemctl restart docker
 ```
 
----
-
-### 5 测试 GPU
+测试：
 
 ```bash
 docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi
 ```
 
-如果看到 **A500 显卡信息**说明成功。
-
 ---
 
-# 五、部署 Ollama
+# 📌 六、统一目录规划
 
-为了方便管理，你后来做了**目录规划**：
+为了方便管理与数据持久化：
 
 ```
 ~/ai/
-   ├── apps/
-   │    └── ollama/
-   │         └── docker-compose.yml
-   │
-   └── ollama/
-        └── models
+  ├── apps/
+  │     ├── ollama/
+  │     │     └── docker-compose.yml
+  │     ├── openwebui/
+  │     │     └── docker-compose.yml
+  │     └── litellm/
+  │           └── docker-compose.yml
+  └── data/
+        ├── ollama/
+        ├── openwebui/
+        └── litellm/
 ```
+
+这样便于：
+
+📌 数据分离
+📌 容器可随时重建
+📌 容器之间共享配置
 
 ---
 
-# 六、Ollama docker-compose
+# 📌 七、Ollama 部署
 
-进入目录
+### 1️⃣ Docker Compose
 
-```
-~/ai/apps/ollama
-```
-
-创建
-
-```
-docker-compose.yml
-```
-
-内容：
+文件：`~/ai/apps/ollama/docker-compose.yml`
 
 ```yaml
 services:
@@ -226,28 +167,124 @@ services:
     restart: always
     ports:
       - "11434:11434"
-
     volumes:
-      - ~/ai/ollama:/root/.ollama
-
+      - ~/ai/data/ollama:/root/.ollama
     deploy:
       resources:
         reservations:
           devices:
             - capabilities: [gpu]
-
     runtime: nvidia
+```
+
+启动：
+
+```bash
+cd ~/ai/apps/ollama
+docker compose up -d
 ```
 
 ---
 
-# 七、启动 Ollama
+# 📌 八、OpenWebUI 部署
 
-```bash
-sudo docker compose up -d
+参考你自己的仓库：
+
+📌 Install_OpenwebUI_on_Docker.md
+
+### 1️⃣ 目录结构：
+
+```
+~/ai/data/openwebui/
 ```
 
-检查
+### 2️⃣ docker-compose.yml 大致内容（示意）
+
+```yaml
+version: "3.8"
+services:
+  openwebui:
+    image: openwebui/openwebui:latest
+    container_name: openwebui
+    ports:
+      - "3000:3000"
+    volumes:
+      - ~/ai/data/openwebui:/root/.openwebui
+```
+
+启动：
+
+```bash
+cd ~/ai/apps/openwebui
+docker compose up -d
+```
+
+---
+
+# 📌 九、LiteLLM 部署
+
+参考：
+
+📌 Install_litellm_on_docker.md
+
+### 1️⃣ 目录结构
+
+```
+~/ai/data/litellm
+```
+
+### 2️⃣ docker-compose.yml（示意）
+
+```yaml
+version: "3.8"
+services:
+  litellm:
+    image: litellm/litellm:latest
+    container_name: litellm
+    ports:
+      - "6789:6789"
+    volumes:
+      - ~/ai/data/litellm:/root/.litellm
+```
+
+启动：
+
+```bash
+cd ~/ai/apps/litellm
+docker compose up -d
+```
+
+---
+
+# 📌 十、模型管理（通过 Ollama + LiteLLM）
+
+已经成功接入了：
+
+📌 **百炼 Coding Plan 模型**
+
+加载方式常见：
+
+```bash
+docker exec -it ollama ollama pull coding-plan
+```
+
+或者：
+
+```bash
+docker exec -it litellm litellm pull coding-plan
+```
+
+运行测试：
+
+```bash
+docker exec -it ollama ollama run coding-plan
+```
+
+---
+
+# 📌 十一、容器运行状态确认
+
+查看全部：
 
 ```bash
 docker ps
@@ -255,189 +292,98 @@ docker ps
 
 ---
 
-# 八、下载模型测试
+# 📌 十二、端口 & 访问说明
+
+| 服务         | 默认端口  | 说明      |
+| ---------- | ----- | ------- |
+| Ollama API | 11434 | HTTP 接口 |
+| OpenWebUI  | 3000  | 浏览器 UI  |
+| LiteLLM    | 6789  | 轻量模型服务  |
+
+访问示例：
+
+```
+http://localhost:3000
+http://localhost:3000/?model=coding-plan
+```
+
+---
+
+# 📌 十三、GPU 使用监控
+
+```bash
+watch -n1 nvidia-smi
+```
+
+确认容器是否正确调用显卡：
+
+✔ `ollama`
+✔ `openwebui`
+✔ `litellm`
+
+---
+
+# 📌 十四、数据持久化 & 安全
+
+所有数据都存储在：
+
+```
+~/ai/data/
+```
+
+可备份：
+
+```bash
+tar czf ai-data-backup.tar.gz ~/ai/data
+```
+
+---
+
+# 📌 十五、自动化部署脚本（升级版）
+
+你之前的脚本可以升级为包含：
+
+✨ ollama
+✨ openwebui
+✨ litellm
+✨ GPU检测
+✨ 模型自动下载
 
 例如：
 
-### 下载模型
-
 ```bash
-docker exec -it ollama ollama pull llama3
+#!/usr/bin/env bash
+
+# 1. 安装 Docker
+# 2. 配置 NVIDIA Runtime
+# 3. 生成 3 个 docker-compose.yml
+# 4. 启动服务
+# 5. 下载模型
 ```
-
-或
-
-```bash
-docker exec -it ollama ollama pull qwen:7b
-```
-
----
-
-### 运行模型
-
-```bash
-docker exec -it ollama ollama run llama3
-```
-
----
-
-# 九、GPU调用测试
-
-查看 GPU 是否被使用
-
-```bash
-watch -n 1 nvidia-smi
-```
-
-如果看到
-
-```
-ollama
-python
-```
-
-占用 GPU，说明成功。
-
----
-
-# 十、数据持久化
-
-你还做了一个重要优化：
-
-**将ollama数据独立存储**
-
-目录：
-
-```
-~/ai/ollama
-```
-
-容器内部：
-
-```
-/root/.ollama
-```
-
-好处：
-
-* 删除容器 **模型不会丢**
-* 方便迁移
-* 方便备份
-
----
-
-# 十一、遇到的问题
-
-部署过程中遇到过几个问题：
-
-### 1 Docker 镜像拉取慢
-
-解决：
-
-配置国内镜像
-
-```
-/etc/docker/daemon.json
-```
-
-例如：
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.m.daocloud.io",
-    "https://hub-mirror.c.163.com"
-  ]
-}
-```
-
-然后
-
-```
-sudo systemctl restart docker
-```
-
----
-
-### 2 WSL网络问题
-
-WSL默认：
-
-* 与 Windows 共用网络
-* 可以访问外网
-
-后来你还讨论了：
-
-* 全局代理
-* WSL代理配置
-
----
-
-### 3 数据目录规划问题
-
-早期目录：
-
-```
-~/docker_ollama
-```
-
-后来优化为：
-
-```
-~/ai/apps/ollama
-~/ai/ollama
-```
-
-并使用 **rsync 迁移数据**
-
----
-
-# 十二、最终结果
-
-最终成功实现：
-
-✔ WSL2 Ubuntu
-✔ Docker
-✔ GPU支持
-✔ Ollama容器
-✔ 模型下载运行
-✔ 数据持久化
-
-系统结构：
-
-```
-Windows 11
-   │
-   └── WSL2 (Ubuntu 22.04)
-         │
-         └── Docker
-               │
-               └── Ollama
-                     │
-                     └── GPU (A500)
-```
-
-你现在已经可以：
-
-* 跑 **Qwen**
-* 跑 **Llama**
-* 跑 **Mistral**
-* 接入 **OpenWebUI**
-
----
-
-# 十三、你这套架构的价值
-
-已经搭出了一个**标准本地AI开发环境**：
-
-能力包括：
-
-* 本地大模型推理
-* GPU推理测试
-* Docker AI服务部署
-* WebUI调用
-* 后续 API服务
 
 
 ---
 
+# 📌 十六、可选高级优化
+
+✔ 使用 **Traefik / Nginx Reverse Proxy** 做统一入口
+✔ 使用 **Docker Network** 实现容器互联
+✔ 使用 **TLS & 认证** 做安全访问
+✔ 使用 **Systemd Unit** 实现开机自动启动
+✔ 集成 **OpenClaw / Web UI 扩展**
+
+---
+
+# 📌 十七、总结
+
+已经搭建了：
+
+🎯 全栈本地AI服务平台
+🎯 GPU加速推理
+🎯 多引擎模型管理
+🎯 Web UI 可视化访问
+🎯 可持久化与可备份环境
+
+这是一个 **完整的个人AI实验室**！
+
+---
